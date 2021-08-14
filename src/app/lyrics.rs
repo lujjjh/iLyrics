@@ -6,6 +6,7 @@ pub struct Lyrics {
     client: Client,
     last_query: String,
     lyrics: Option<lrc::Lyrics>,
+    lines: Vec<(Duration, String)>,
 }
 
 impl Lyrics {
@@ -18,6 +19,7 @@ impl Lyrics {
             client,
             last_query: String::from(""),
             lyrics: None,
+            lines: vec![],
         }
     }
 
@@ -35,15 +37,23 @@ impl Lyrics {
                 .query(&[("q", q)])
                 .send()?
                 .text()?;
-            self.lyrics = Some(lrc::Lyrics::from_str(body)?);
+            let lyrics = lrc::Lyrics::from_str(body)?;
+            self.lines = lyrics
+                .get_timed_lines()
+                .as_ref()
+                .iter()
+                .map(|(time_tag, s)| {
+                    let duration = Duration::from_millis(time_tag.get_timestamp() as u64);
+                    let s = html_escape::decode_html_entities(&s).trim().to_string();
+                    (duration, s)
+                })
+                .collect::<Vec<(Duration, String)>>();
+            self.lyrics = Some(lyrics);
         }
         Ok(if let Some(lyrics) = &self.lyrics {
             lyrics
                 .find_timed_line_index(duration.as_millis() as i64)
-                .map(|index| {
-                    let timed_lines = lyrics.get_timed_lines();
-                    timed_lines[index].1.to_string()
-                })
+                .map(|index| self.lines[index].1.clone())
         } else {
             None
         })

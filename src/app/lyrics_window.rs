@@ -33,7 +33,6 @@ pub struct LyricsWindow {
     fg_brush: ID2D1SolidColorBrush,
     itunes: ITunes,
     lyrics: Lyrics,
-    last_text_to_render: Option<String>,
     last_player_position: Option<Duration>,
     last_updated_at: SystemTime,
 }
@@ -138,7 +137,6 @@ impl LyricsWindow {
                 fg_brush,
                 itunes: ITunes::new()?,
                 lyrics: Lyrics::new(),
-                last_text_to_render: None,
                 last_player_position: None,
                 last_updated_at: SystemTime::now(),
             })
@@ -346,6 +344,10 @@ impl LyricsWindow {
                 let last_drawn_at_elapsed = last_drawn_at.elapsed().unwrap();
                 let next_draw_duration;
                 if last_drawn_at_elapsed >= draw_interval {
+                    if !self.itunes.check_if_alive() {
+                        PostQuitMessage(0);
+                        return;
+                    }
                     self.draw().unwrap();
                     last_drawn_at = SystemTime::now();
                     next_draw_duration = draw_interval;
@@ -391,54 +393,42 @@ impl LyricsWindow {
         }
     }
 
+    fn get_text_to_render(&mut self) -> String {
+        let itunes = &self.itunes;
+        let lyrics = &mut self.lyrics;
+
+        // We should conduct the interpolation because iTunes only provides precision to seconds.
+        let mut player_position = itunes.get_player_position();
+        if !itunes.is_playing() || player_position != self.last_player_position {
+            self.last_player_position = player_position;
+            self.last_updated_at = SystemTime::now();
+        } else if let Some(value) = player_position {
+            let elapsed = self
+                .last_updated_at
+                .elapsed()
+                .unwrap()
+                .min(Duration::from_secs(1));
+            player_position = Some(value + elapsed);
+        }
+
+        if itunes.is_playing() {
+            itunes
+                .get_current_track_info()
+                .map(|TrackInfo { name, artist }| format!("{} - {}", name, artist))
+                .and_then(|query| {
+                    player_position.and_then(|duration| {
+                        lyrics.get_lyrics_line(&query, duration).unwrap_or_default()
+                    })
+                })
+        } else {
+            None
+        }
+        .unwrap_or_default()
+    }
+
     fn draw(&mut self) -> windows::Result<()> {
         unsafe {
             let dc = &self.context;
-            let dwrite_factory = &self.dwrite_factory;
-            let itunes = &self.itunes;
-            let lyrics = &mut self.lyrics;
-
-            if !itunes.check_if_alive() {
-                PostQuitMessage(0);
-                return Ok(());
-            }
-
-            // We should conduct the interpolation because iTunes only provides precision to seconds.
-            let mut player_position = itunes.get_player_position();
-            if !itunes.is_playing() || player_position != self.last_player_position {
-                self.last_player_position = player_position;
-                self.last_updated_at = SystemTime::now();
-            } else if let Some(value) = player_position {
-                let elapsed = self
-                    .last_updated_at
-                    .elapsed()
-                    .unwrap()
-                    .min(Duration::from_secs(1));
-                player_position = Some(value + elapsed);
-            }
-
-            let text_to_render = if itunes.is_playing() {
-                itunes
-                    .get_current_track_info()
-                    .map(|TrackInfo { name, artist }| format!("{} - {}", name, artist))
-                    .and_then(|query| {
-                        player_position.and_then(|duration| {
-                            lyrics.get_lyrics_line(&query, duration).unwrap_or_default()
-                        })
-                    })
-            } else {
-                None
-            };
-
-            if text_to_render == self.last_text_to_render {
-                return Ok(());
-            }
-            self.last_text_to_render = text_to_render.clone();
-
-            let text_to_render = text_to_render
-                .map(|s| html_escape::decode_html_entities(&s).to_string())
-                .map(|s| s.trim().to_string());
-
             dc.BeginDraw();
 
             dc.Clear(&D2D1_COLOR_F {
@@ -448,42 +438,42 @@ impl LyricsWindow {
                 a: 0.,
             });
 
-            if let Some(text_to_render) = text_to_render {
-                if !text_to_render.is_empty() {
-                    let text_to_render = windows::HSTRING::from(text_to_render);
+            let text_to_render = self.get_text_to_render();
+            let dc = &self.context;
+            let dwrite_factory = &self.dwrite_factory;
+            if !text_to_render.is_empty() {
+                let text_to_render = windows::HSTRING::from(text_to_render);
 
-                    let D2D_SIZE_F { width, height } = dc.GetSize();
-                    let text_layout = dwrite_factory.CreateTextLayout(
-                        PWSTR(text_to_render.as_wide().as_ptr() as *mut _),
-                        text_to_render.len() as u32,
-                        &self.text_format,
-                        width,
-                        height,
-                    )?;
+                let D2D_SIZE_F { width, height } = dc.GetSize();
+                let text_layout = dwrite_factory.CreateTextLayout(
+                    PWSTR(text_to_render.as_wide().as_ptr() as *mut _),
+                    text_to_render.len() as u32,
+                    &self.text_format,
+                    width,
+                    height,
+                )?;
 
-                    let metrics = text_layout.GetMetrics()?;
-                    let (padding_horizontal, padding_vertical) = (10., 5.);
-                    dc.FillRectangle(
-                        &D2D_RECT_F {
-                            left: metrics.left - padding_horizontal,
-                            top: metrics.top - padding_vertical,
-                            right: metrics.left + metrics.width + padding_horizontal,
-                            bottom: metrics.top + metrics.height + padding_vertical,
-                        },
-                        &self.bg_brush,
-                    );
+                let metrics = text_layout.GetMetrics()?;
+                let (padding_horizontal, padding_vertical) = (10., 5.);
+                dc.FillRectangle(
+                    &D2D_RECT_F {
+                        left: metrics.left - padding_horizontal,
+                        top: metrics.top - padding_vertical,
+                        right: metrics.left + metrics.width + padding_horizontal,
+                        bottom: metrics.top + metrics.height + padding_vertical,
+                    },
+                    &self.bg_brush,
+                );
 
-                    dc.DrawTextLayout(
-                        D2D_POINT_2F { x: 0., y: 0. },
-                        &text_layout,
-                        &self.fg_brush,
-                        D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT,
-                    );
-                }
+                dc.DrawTextLayout(
+                    D2D_POINT_2F { x: 0., y: 0. },
+                    &text_layout,
+                    &self.fg_brush,
+                    D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT,
+                );
             }
 
             dc.EndDraw(ptr::null_mut(), ptr::null_mut())?;
-
             self.swap_chain.Present(0, 0).unwrap();
         }
 
