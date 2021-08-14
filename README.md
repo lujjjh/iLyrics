@@ -1,6 +1,6 @@
 # iTunes Desktop Lyrics for Windows
 
-A third-party addon to show the lyrics on the desktop for iTunes.
+A third-party iTunes addon to show the lyrics on the desktop.
 
 ## Preview
 
