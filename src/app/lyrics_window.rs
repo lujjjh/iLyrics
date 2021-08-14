@@ -30,6 +30,9 @@ pub struct LyricsWindow {
     _target: IDCompositionTarget,
     itunes: ITunes,
     lyrics: Lyrics,
+    last_text_to_render: Option<String>,
+    last_player_position: Option<Duration>,
+    last_updated_at: SystemTime,
 }
 
 const CLASS_NAME: PWSTR = PWSTR(utf16_null!("iTunesMate").as_ptr() as *mut u16);
@@ -59,6 +62,9 @@ impl LyricsWindow {
             dwrite_factory,
             itunes: ITunes::new()?,
             lyrics: Lyrics::new(),
+            last_text_to_render: None,
+            last_player_position: None,
+            last_updated_at: SystemTime::now(),
         })
     }
 
@@ -218,11 +224,8 @@ impl LyricsWindow {
     ) -> windows::Result<IDCompositionTarget> {
         unsafe {
             let dcomp_device: IDCompositionDevice = DCompositionCreateDevice(device)?;
-
             let target = dcomp_device.CreateTargetForHwnd(hwnd, BOOL(1))?;
-
             let visual = dcomp_device.CreateVisual()?;
-
             visual.SetContent(swap_chain)?;
             target.SetRoot(&visual)?;
             dcomp_device.Commit()?;
@@ -252,7 +255,7 @@ impl LyricsWindow {
     pub fn run_message_loop(&mut self) {
         unsafe {
             let mut msg = MSG::default();
-            let draw_interval = Duration::from_millis(100);
+            let draw_interval = Duration::from_millis(50);
             let mut last_drawn_at = SystemTime::now() - draw_interval;
             loop {
                 while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
@@ -323,54 +326,29 @@ impl LyricsWindow {
                 return Ok(());
             }
 
-            let track = itunes.get_current_track_info();
-            if track.is_none() {
-                dc.BeginDraw();
-                dc.Clear(ptr::null());
-                dc.EndDraw(ptr::null_mut(), ptr::null_mut())?;
-                return Ok(());
-            }
-            let TrackInfo { name, artist } = track.unwrap();
-
-            let text_format = dwrite_factory.CreateTextFormat(
-                "Microsoft Yahei",
-                None,
-                DWRITE_FONT_WEIGHT_NORMAL,
-                DWRITE_FONT_STYLE_NORMAL,
-                DWRITE_FONT_STRETCH_NORMAL,
-                24.,
-                "",
-            )?;
-
-            text_format.SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER)?;
-
-            text_format.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER)?;
-
-            let D2D_SIZE_F { width, height } = dc.GetSize();
-
-            let query = format!("{} - {}", name, artist);
-            let text = self
-                .itunes
-                .get_player_position()
-                .map(|duration| duration + Duration::from_millis(500))
-                .and_then(|duration| lyrics.get_lyrics_line(&query, duration).unwrap_or(None))
-                .unwrap_or_default();
-            if text.is_empty() {
-                dc.BeginDraw();
-                dc.Clear(ptr::null());
-                dc.EndDraw(ptr::null_mut(), ptr::null_mut())?;
-                return Ok(());
+            // We should conduct the interpolation because iTunes only provides precision to seconds.
+            let mut player_position = itunes.get_player_position();
+            if player_position != self.last_player_position {
+                self.last_player_position = player_position;
+                self.last_updated_at = SystemTime::now();
+            } else if let Some(player_position) = player_position.as_mut() {
+                *player_position += self.last_updated_at.elapsed().unwrap();
             }
 
-            let text = windows::HSTRING::from(text);
+            let text_to_render = itunes
+                .get_current_track_info()
+                .map(|TrackInfo { name, artist }| format!("{} - {}", name, artist))
+                .and_then(|query| {
+                    player_position.and_then(|duration| {
+                        lyrics.get_lyrics_line(&query, duration).unwrap_or_default()
+                    })
+                })
+                .map(|s| s.trim().to_string());
 
-            let text_layout = dwrite_factory.CreateTextLayout(
-                PWSTR(text.as_wide().as_ptr() as *mut _),
-                text.len() as u32,
-                &text_format,
-                width,
-                height,
-            )?;
+            if text_to_render == self.last_text_to_render {
+                return Ok(());
+            }
+            self.last_text_to_render = text_to_render.clone();
 
             dc.BeginDraw();
 
@@ -381,48 +359,75 @@ impl LyricsWindow {
                 a: 0.,
             });
 
-            let bg_brush = dc.CreateSolidColorBrush(
-                &D2D1_COLOR_F {
-                    r: 0.,
-                    g: 0.,
-                    b: 0.,
-                    a: 0.5,
-                },
-                ptr::null(),
-            )?;
+            if let Some(text_to_render) = text_to_render {
+                if !text_to_render.is_empty() {
+                    let text_to_render = windows::HSTRING::from(text_to_render);
 
-            let fg_brush = dc.CreateSolidColorBrush(
-                &D2D1_COLOR_F {
-                    r: 1.,
-                    g: 1.,
-                    b: 1.,
-                    a: 1.,
-                },
-                ptr::null(),
-            )?;
+                    let text_format = dwrite_factory.CreateTextFormat(
+                        "Microsoft Yahei",
+                        None,
+                        DWRITE_FONT_WEIGHT_NORMAL,
+                        DWRITE_FONT_STYLE_NORMAL,
+                        DWRITE_FONT_STRETCH_NORMAL,
+                        24.,
+                        "",
+                    )?;
+                    text_format.SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER)?;
+                    text_format.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER)?;
 
-            let metrics = text_layout.GetMetrics()?;
-            let (padding_horizontal, padding_vertical) = (10., 5.);
-            dc.FillRectangle(
-                &D2D_RECT_F {
-                    left: metrics.left - padding_horizontal,
-                    top: metrics.top - padding_vertical,
-                    right: metrics.left + metrics.width + padding_horizontal,
-                    bottom: metrics.top + metrics.height + padding_vertical,
-                },
-                &bg_brush,
-            );
+                    let D2D_SIZE_F { width, height } = dc.GetSize();
+                    let text_layout = dwrite_factory.CreateTextLayout(
+                        PWSTR(text_to_render.as_wide().as_ptr() as *mut _),
+                        text_to_render.len() as u32,
+                        &text_format,
+                        width,
+                        height,
+                    )?;
 
-            dc.DrawTextLayout(
-                D2D_POINT_2F { x: 0., y: 0. },
-                &text_layout,
-                &fg_brush,
-                D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT,
-            );
+                    let bg_brush = dc.CreateSolidColorBrush(
+                        &D2D1_COLOR_F {
+                            r: 0.,
+                            g: 0.,
+                            b: 0.,
+                            a: 0.5,
+                        },
+                        ptr::null(),
+                    )?;
+
+                    let fg_brush = dc.CreateSolidColorBrush(
+                        &D2D1_COLOR_F {
+                            r: 1.,
+                            g: 1.,
+                            b: 1.,
+                            a: 1.,
+                        },
+                        ptr::null(),
+                    )?;
+
+                    let metrics = text_layout.GetMetrics()?;
+                    let (padding_horizontal, padding_vertical) = (10., 5.);
+                    dc.FillRectangle(
+                        &D2D_RECT_F {
+                            left: metrics.left - padding_horizontal,
+                            top: metrics.top - padding_vertical,
+                            right: metrics.left + metrics.width + padding_horizontal,
+                            bottom: metrics.top + metrics.height + padding_vertical,
+                        },
+                        &bg_brush,
+                    );
+
+                    dc.DrawTextLayout(
+                        D2D_POINT_2F { x: 0., y: 0. },
+                        &text_layout,
+                        &fg_brush,
+                        D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT,
+                    );
+                }
+            }
 
             dc.EndDraw(ptr::null_mut(), ptr::null_mut())?;
 
-            self.swap_chain.Present(0, 0)?;
+            self.swap_chain.Present(0, 0).unwrap();
         }
 
         Ok(())
