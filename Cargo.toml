@@ -1,0 +1,15 @@
+[package]
+name = "itunes-desktop-lyrics-windows"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+bindings = { path = "bindings" }
+windows = "0.18.0"
+utf16_lit = "2.0.2"
+reqwest = { version = "0.11", features = ["blocking"] }
+url = "2.2.2"
+lrc = "0.1.6"
+
+[build-dependencies]
+embed-resource = "1.6"
