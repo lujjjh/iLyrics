@@ -28,7 +28,7 @@ pub struct LyricsWindow {
     context: ID2D1DeviceContext,
     swap_chain: IDXGISwapChain1,
     _target: IDCompositionTarget,
-    text_format: IDWriteTextFormat,
+    text_format: IDWriteTextFormat1,
     bg_brush: ID2D1SolidColorBrush,
     fg_brush: ID2D1SolidColorBrush,
     itunes: ITunes,
@@ -49,6 +49,7 @@ impl LyricsWindow {
             let device = Self::create_dxgi_device()?;
             let d2d_factory = Self::create_factory()?;
             let context = Self::create_device_context(&device, &d2d_factory)?;
+            context.SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
             let (mut dpi_x, mut dpi_y) = (0., 0.);
             d2d_factory.GetDesktopDpi(&mut dpi_x, &mut dpi_y);
             let hwnd = Self::create_window(instance, dpi_x, dpi_y);
@@ -57,17 +58,51 @@ impl LyricsWindow {
             let target = Self::create_composition(hwnd, &device, &swap_chain)?;
             let dwrite_factory = Self::create_dwrite_factory()?;
 
-            let text_format = dwrite_factory.CreateTextFormat(
-                "Microsoft Yahei",
-                None,
-                DWRITE_FONT_WEIGHT_NORMAL,
-                DWRITE_FONT_STYLE_NORMAL,
-                DWRITE_FONT_STRETCH_NORMAL,
-                24.,
-                "",
-            )?;
+            let text_format: IDWriteTextFormat1 = dwrite_factory
+                .CreateTextFormat(
+                    "Segoe UI",
+                    None,
+                    DWRITE_FONT_WEIGHT_NORMAL,
+                    DWRITE_FONT_STYLE_NORMAL,
+                    DWRITE_FONT_STRETCH_NORMAL,
+                    24.,
+                    "",
+                )?
+                .cast()?;
             text_format.SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER)?;
             text_format.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER)?;
+
+            let font_fallback_builder = dwrite_factory.CreateFontFallbackBuilder()?;
+            let ranges = DWRITE_UNICODE_RANGE {
+                first: 0x0,
+                last: 0xffffffff,
+            };
+            let fallback_family_names = vec![
+                "Segoe UI Emoji",
+                "Segoe UI Symbol",
+                "Helvetica",
+                "Microsoft Yahei",
+            ]
+            .iter()
+            .map(|&name| name.encode_utf16().chain([0]).collect::<Vec<u16>>())
+            .collect::<Vec<Vec<u16>>>();
+            let fallback_family_names = fallback_family_names
+                .iter()
+                .map(|name| name.as_ptr())
+                .collect::<Vec<*const u16>>();
+            font_fallback_builder.AddMapping(
+                &ranges,
+                1,
+                fallback_family_names.as_ptr(),
+                fallback_family_names.len() as u32,
+                None,
+                None,
+                None,
+                1.,
+            )?;
+            font_fallback_builder.AddMappings(dwrite_factory.GetSystemFontFallback()?)?;
+            let font_fallback = font_fallback_builder.CreateFontFallback()?;
+            text_format.SetFontFallback(font_fallback)?;
 
             let bg_brush = context.CreateSolidColorBrush(
                 &D2D1_COLOR_F {
