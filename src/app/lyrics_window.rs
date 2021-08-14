@@ -343,6 +343,7 @@ impl LyricsWindow {
                         lyrics.get_lyrics_line(&query, duration).unwrap_or_default()
                     })
                 })
+                .map(|s| html_escape::decode_html_entities(&s).to_string())
                 .map(|s| s.trim().to_string());
 
             if text_to_render == self.last_text_to_render {
