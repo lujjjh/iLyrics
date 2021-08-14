@@ -374,7 +374,6 @@ dependencies = [
  "html-escape",
  "lrc",
  "reqwest",
- "url",
  "utf16_lit",
  "windows",
 ]

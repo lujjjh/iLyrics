@@ -1,15 +1,21 @@
 use std::time::Duration;
 
-use url::Url;
+use reqwest::blocking::Client;
 
 pub struct Lyrics {
+    client: Client,
     last_query: String,
     lyrics: Option<lrc::Lyrics>,
 }
 
 impl Lyrics {
     pub fn new() -> Self {
+        let client = Client::builder()
+            .timeout(Duration::from_secs(10))
+            .build()
+            .unwrap();
         Self {
+            client,
             last_query: String::from(""),
             lyrics: None,
         }
@@ -23,9 +29,12 @@ impl Lyrics {
         if self.last_query != q {
             self.last_query = q.to_string();
             self.lyrics = None;
-            let mut uri = Url::parse("https://lyrics.lujjjh.workers.dev/").unwrap();
-            uri.query_pairs_mut().append_pair("q", q);
-            let body = reqwest::blocking::get(uri.to_string())?.text()?;
+            let body = self
+                .client
+                .get("https://lyrics.lujjjh.workers.dev/")
+                .query(&[("q", q)])
+                .send()?
+                .text()?;
             self.lyrics = Some(lrc::Lyrics::from_str(body)?);
         }
         Ok(if let Some(lyrics) = &self.lyrics {

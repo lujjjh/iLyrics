@@ -77,15 +77,17 @@ impl LyricsWindow {
                 first: 0x0,
                 last: 0xffffffff,
             };
-            let fallback_family_names = vec![
+            let fallback_family_names = [
                 "Segoe UI Emoji",
                 "Segoe UI Symbol",
                 "Helvetica",
                 "Microsoft Yahei",
-            ]
-            .iter()
-            .map(|&name| name.encode_utf16().chain([0]).collect::<Vec<u16>>())
-            .collect::<Vec<Vec<u16>>>();
+            ];
+            // The two map-collect cannot be merged since the `name`s must live long enough.
+            let fallback_family_names = fallback_family_names
+                .iter()
+                .map(|&name| name.encode_utf16().chain([0]).collect::<Vec<u16>>())
+                .collect::<Vec<Vec<u16>>>();
             let fallback_family_names = fallback_family_names
                 .iter()
                 .map(|name| name.as_ptr())
@@ -320,7 +322,7 @@ impl LyricsWindow {
     pub fn show(&mut self) -> windows::Result<()> {
         unsafe {
             SetWindowLongPtrW(self.hwnd, GWLP_USERDATA, self as *const _ as _);
-            ShowWindow(self.hwnd, SW_SHOW);
+            ShowWindow(self.hwnd, SW_SHOWNOACTIVATE);
             SendMessageW(self.hwnd, WM_PAINT, WPARAM(0), LPARAM(0));
         }
 
@@ -406,8 +408,8 @@ impl LyricsWindow {
             if !itunes.is_playing() || player_position != self.last_player_position {
                 self.last_player_position = player_position;
                 self.last_updated_at = SystemTime::now();
-            } else if let Some(player_position) = player_position.as_mut() {
-                *player_position += self.last_updated_at.elapsed().unwrap();
+            } else if let Some(value) = player_position {
+                player_position = Some(value + self.last_updated_at.elapsed().unwrap());
             }
 
             let text_to_render = if itunes.is_playing() {
