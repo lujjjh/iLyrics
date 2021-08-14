@@ -4,7 +4,7 @@ A third-party addon to show the lyrics on the desktop for iTunes.
 
 ## Preview
 
-<img width="623" height="174" src="https://user-images.githubusercontent.com/3000535/129439464-4e2a916a-1d93-4b17-a944-74d4fa475984.png" alt="iTunes Desktop Lyrics for Windows" />
+<img width="1920" src="preview.png" alt="iTunes Desktop Lyrics for Windows" />
 
 ## Prerequisites
 
