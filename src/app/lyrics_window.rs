@@ -409,7 +409,12 @@ impl LyricsWindow {
                 self.last_player_position = player_position;
                 self.last_updated_at = SystemTime::now();
             } else if let Some(value) = player_position {
-                player_position = Some(value + self.last_updated_at.elapsed().unwrap());
+                let elapsed = self
+                    .last_updated_at
+                    .elapsed()
+                    .unwrap()
+                    .min(Duration::from_secs(1));
+                player_position = Some(value + elapsed);
             }
 
             let text_to_render = if itunes.is_playing() {
