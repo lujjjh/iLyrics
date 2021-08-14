@@ -28,6 +28,9 @@ pub struct LyricsWindow {
     context: ID2D1DeviceContext,
     swap_chain: IDXGISwapChain1,
     _target: IDCompositionTarget,
+    text_format: IDWriteTextFormat,
+    bg_brush: ID2D1SolidColorBrush,
+    fg_brush: ID2D1SolidColorBrush,
     itunes: ITunes,
     lyrics: Lyrics,
     last_text_to_render: Option<String>,
@@ -39,33 +42,70 @@ const CLASS_NAME: PWSTR = PWSTR(utf16_null!("iTunesMate").as_ptr() as *mut u16);
 
 impl LyricsWindow {
     pub fn new() -> windows::Result<Self> {
-        let instance = unsafe { GetModuleHandleW(PWSTR::NULL) };
-        Self::register_class(instance);
+        unsafe {
+            let instance = GetModuleHandleW(PWSTR::NULL);
+            Self::register_class(instance);
 
-        let device = Self::create_dxgi_device()?;
-        let d2d_factory = Self::create_factory()?;
-        let context = Self::create_device_context(&device, &d2d_factory)?;
-        let (mut dpi_x, mut dpi_y) = (0., 0.);
-        unsafe { d2d_factory.GetDesktopDpi(&mut dpi_x, &mut dpi_y) };
-        let hwnd = Self::create_window(instance, dpi_x, dpi_y);
-        let swap_chain = Self::create_swap_chain(hwnd, &device)?;
-        Self::create_bitmap(&d2d_factory, &context, &swap_chain)?;
-        let target = Self::create_composition(hwnd, &device, &swap_chain)?;
-        let dwrite_factory = Self::create_dwrite_factory()?;
+            let device = Self::create_dxgi_device()?;
+            let d2d_factory = Self::create_factory()?;
+            let context = Self::create_device_context(&device, &d2d_factory)?;
+            let (mut dpi_x, mut dpi_y) = (0., 0.);
+            d2d_factory.GetDesktopDpi(&mut dpi_x, &mut dpi_y);
+            let hwnd = Self::create_window(instance, dpi_x, dpi_y);
+            let swap_chain = Self::create_swap_chain(hwnd, &device)?;
+            Self::create_bitmap(&d2d_factory, &context, &swap_chain)?;
+            let target = Self::create_composition(hwnd, &device, &swap_chain)?;
+            let dwrite_factory = Self::create_dwrite_factory()?;
 
-        Ok(Self {
-            hwnd,
-            d2d_factory,
-            context,
-            swap_chain,
-            _target: target,
-            dwrite_factory,
-            itunes: ITunes::new()?,
-            lyrics: Lyrics::new(),
-            last_text_to_render: None,
-            last_player_position: None,
-            last_updated_at: SystemTime::now(),
-        })
+            let text_format = dwrite_factory.CreateTextFormat(
+                "Microsoft Yahei",
+                None,
+                DWRITE_FONT_WEIGHT_NORMAL,
+                DWRITE_FONT_STYLE_NORMAL,
+                DWRITE_FONT_STRETCH_NORMAL,
+                24.,
+                "",
+            )?;
+            text_format.SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER)?;
+            text_format.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER)?;
+
+            let bg_brush = context.CreateSolidColorBrush(
+                &D2D1_COLOR_F {
+                    r: 0.,
+                    g: 0.,
+                    b: 0.,
+                    a: 0.5,
+                },
+                ptr::null(),
+            )?;
+
+            let fg_brush = context.CreateSolidColorBrush(
+                &D2D1_COLOR_F {
+                    r: 1.,
+                    g: 1.,
+                    b: 1.,
+                    a: 1.,
+                },
+                ptr::null(),
+            )?;
+
+            Ok(Self {
+                hwnd,
+                d2d_factory,
+                context,
+                swap_chain,
+                _target: target,
+                dwrite_factory,
+                text_format,
+                bg_brush,
+                fg_brush,
+                itunes: ITunes::new()?,
+                lyrics: Lyrics::new(),
+                last_text_to_render: None,
+                last_player_position: None,
+                last_updated_at: SystemTime::now(),
+            })
+        }
     }
 
     fn register_class(instance: HINSTANCE) {
@@ -328,28 +368,34 @@ impl LyricsWindow {
 
             // We should conduct the interpolation because iTunes only provides precision to seconds.
             let mut player_position = itunes.get_player_position();
-            if player_position != self.last_player_position {
+            if !itunes.is_playing() || player_position != self.last_player_position {
                 self.last_player_position = player_position;
                 self.last_updated_at = SystemTime::now();
             } else if let Some(player_position) = player_position.as_mut() {
                 *player_position += self.last_updated_at.elapsed().unwrap();
             }
 
-            let text_to_render = itunes
-                .get_current_track_info()
-                .map(|TrackInfo { name, artist }| format!("{} - {}", name, artist))
-                .and_then(|query| {
-                    player_position.and_then(|duration| {
-                        lyrics.get_lyrics_line(&query, duration).unwrap_or_default()
+            let text_to_render = if itunes.is_playing() {
+                itunes
+                    .get_current_track_info()
+                    .map(|TrackInfo { name, artist }| format!("{} - {}", name, artist))
+                    .and_then(|query| {
+                        player_position.and_then(|duration| {
+                            lyrics.get_lyrics_line(&query, duration).unwrap_or_default()
+                        })
                     })
-                })
-                .map(|s| html_escape::decode_html_entities(&s).to_string())
-                .map(|s| s.trim().to_string());
+            } else {
+                None
+            };
 
             if text_to_render == self.last_text_to_render {
                 return Ok(());
             }
             self.last_text_to_render = text_to_render.clone();
+
+            let text_to_render = text_to_render
+                .map(|s| html_escape::decode_html_entities(&s).to_string())
+                .map(|s| s.trim().to_string());
 
             dc.BeginDraw();
 
@@ -364,45 +410,13 @@ impl LyricsWindow {
                 if !text_to_render.is_empty() {
                     let text_to_render = windows::HSTRING::from(text_to_render);
 
-                    let text_format = dwrite_factory.CreateTextFormat(
-                        "Microsoft Yahei",
-                        None,
-                        DWRITE_FONT_WEIGHT_NORMAL,
-                        DWRITE_FONT_STYLE_NORMAL,
-                        DWRITE_FONT_STRETCH_NORMAL,
-                        24.,
-                        "",
-                    )?;
-                    text_format.SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER)?;
-                    text_format.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER)?;
-
                     let D2D_SIZE_F { width, height } = dc.GetSize();
                     let text_layout = dwrite_factory.CreateTextLayout(
                         PWSTR(text_to_render.as_wide().as_ptr() as *mut _),
                         text_to_render.len() as u32,
-                        &text_format,
+                        &self.text_format,
                         width,
                         height,
-                    )?;
-
-                    let bg_brush = dc.CreateSolidColorBrush(
-                        &D2D1_COLOR_F {
-                            r: 0.,
-                            g: 0.,
-                            b: 0.,
-                            a: 0.5,
-                        },
-                        ptr::null(),
-                    )?;
-
-                    let fg_brush = dc.CreateSolidColorBrush(
-                        &D2D1_COLOR_F {
-                            r: 1.,
-                            g: 1.,
-                            b: 1.,
-                            a: 1.,
-                        },
-                        ptr::null(),
                     )?;
 
                     let metrics = text_layout.GetMetrics()?;
@@ -414,13 +428,13 @@ impl LyricsWindow {
                             right: metrics.left + metrics.width + padding_horizontal,
                             bottom: metrics.top + metrics.height + padding_vertical,
                         },
-                        &bg_brush,
+                        &self.bg_brush,
                     );
 
                     dc.DrawTextLayout(
                         D2D_POINT_2F { x: 0., y: 0. },
                         &text_layout,
-                        &fg_brush,
+                        &self.fg_brush,
                         D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT,
                     );
                 }

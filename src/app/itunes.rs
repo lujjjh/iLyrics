@@ -37,6 +37,12 @@ impl ITunes {
         unsafe { self.get_instance().GetPlayerState() }.is_ok()
     }
 
+    pub fn is_playing(&self) -> bool {
+        unsafe { self.get_instance().GetPlayerState() }
+            .map(|state| state == 1)
+            .unwrap_or(false)
+    }
+
     pub fn get_current_track_info(&self) -> Option<TrackInfo> {
         unsafe {
             self.get_instance()
