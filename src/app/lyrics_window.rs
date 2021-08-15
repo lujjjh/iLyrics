@@ -414,10 +414,11 @@ impl LyricsWindow {
         if itunes.is_playing() {
             itunes
                 .get_current_track_info()
-                .map(|TrackInfo { name, artist }| format!("{} - {}", name, artist))
-                .and_then(|query| {
+                .and_then(|TrackInfo { name, artist }| {
                     player_position.and_then(|duration| {
-                        lyrics.get_lyrics_line(&query, duration).unwrap_or_default()
+                        lyrics
+                            .get_lyrics_line(&name, &artist, duration)
+                            .unwrap_or_default()
                     })
                 })
         } else {

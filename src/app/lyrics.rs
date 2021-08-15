@@ -25,16 +25,18 @@ impl Lyrics {
 
     pub fn get_lyrics_line(
         &mut self,
-        q: &str,
+        name: &str,
+        artist: &str,
         duration: Duration,
     ) -> Result<Option<String>, Box<dyn std::error::Error>> {
-        if self.last_query != q {
-            self.last_query = q.to_string();
+        let query = format!("{} {}", name, artist);
+        if self.last_query != query {
+            self.last_query = query;
             self.lyrics = None;
             let body = self
                 .client
-                .get("https://lyrics.lujjjh.workers.dev/")
-                .query(&[("q", q)])
+                .get("https://lyrics-api.lujjjh.com/")
+                .query(&[("name", name), ("artist", artist)])
                 .send()?
                 .text()?;
             let lyrics = lrc::Lyrics::from_str(body)?;
@@ -66,13 +68,13 @@ fn test_get_lyrics() {
     println!(
         "{:?}",
         lyrics
-            .get_lyrics_line("Lemon Tree Fools Garden", Duration::from_secs(30))
+            .get_lyrics_line("Lemon Tree", "Fool's Garden", Duration::from_secs(30))
             .unwrap()
     );
     println!(
         "{:?}",
         lyrics
-            .get_lyrics_line("Lemon Tree Fools Garden", Duration::from_secs(40))
+            .get_lyrics_line("Lemon Tree", "Fool's Garden", Duration::from_secs(40))
             .unwrap()
     );
 }
