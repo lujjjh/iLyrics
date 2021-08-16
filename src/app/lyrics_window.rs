@@ -344,10 +344,6 @@ impl LyricsWindow {
                 let last_drawn_at_elapsed = last_drawn_at.elapsed().unwrap();
                 let next_draw_duration;
                 if last_drawn_at_elapsed >= draw_interval {
-                    if !self.itunes.check_if_alive() {
-                        PostQuitMessage(0);
-                        return;
-                    }
                     self.draw().unwrap();
                     last_drawn_at = SystemTime::now();
                     next_draw_duration = draw_interval;

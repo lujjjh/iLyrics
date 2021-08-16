@@ -1,4 +1,5 @@
 mod itunes;
+mod itunes_events;
 mod lyrics;
 mod lyrics_window;
 

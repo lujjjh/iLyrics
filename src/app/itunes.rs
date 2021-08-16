@@ -8,6 +8,9 @@ use bindings::Windows::Win32::System::Com::*;
 use bindings::Windows::Win32::System::OleAutomation::*;
 use windows::*;
 
+use super::itunes_events::ITunesImplementation;
+use super::itunes_events::I_ITUNES_EVENTS_IID;
+
 const ITUNES_CLSID: Guid = Guid::from_values(
     0xDC0C2640,
     0x1415,
@@ -21,20 +24,18 @@ impl ITunes {
     pub fn new() -> windows::Result<Self> {
         unsafe {
             CoInitialize(null_mut())?;
-            Ok(Self(CoCreateInstance(
-                &ITUNES_CLSID,
-                None,
-                CLSCTX_LOCAL_SERVER,
-            )?))
+            let instance: IiTunes = CoCreateInstance(&ITUNES_CLSID, None, CLSCTX_LOCAL_SERVER)?;
+            let connection_point_container = instance.cast::<IConnectionPointContainer>()?;
+            let connection_point =
+                connection_point_container.FindConnectionPoint(&I_ITUNES_EVENTS_IID)?;
+            let itunes_events = ITunesImplementation::new();
+            connection_point.Advise(itunes_events)?;
+            Ok(Self(instance))
         }
     }
 
     fn get_instance(&self) -> &IiTunes {
         &self.0
-    }
-
-    pub fn check_if_alive(&self) -> bool {
-        unsafe { self.get_instance().GetPlayerState() }.is_ok()
     }
 
     pub fn is_playing(&self) -> bool {

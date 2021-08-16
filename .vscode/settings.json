@@ -1,3 +1,5 @@
 {
-  "editor.formatOnSave": true
+  "editor.formatOnSave": true,
+  "rust-analyzer.assist.importEnforceGranularity": true,
+  "rust-analyzer.assist.importGranularity": "item"
 }
