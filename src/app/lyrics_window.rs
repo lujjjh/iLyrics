@@ -327,7 +327,7 @@ impl LyricsWindow {
         Ok(())
     }
 
-    pub fn run_message_loop(&mut self) {
+    pub async fn run_message_loop(&mut self) {
         unsafe {
             let mut msg = MSG::default();
             let draw_interval = Duration::from_millis(50);
@@ -344,7 +344,7 @@ impl LyricsWindow {
                 let last_drawn_at_elapsed = last_drawn_at.elapsed().unwrap();
                 let next_draw_duration;
                 if last_drawn_at_elapsed >= draw_interval {
-                    self.draw().unwrap();
+                    self.draw().await.unwrap();
                     last_drawn_at = SystemTime::now();
                     next_draw_duration = draw_interval;
                 } else {
@@ -389,41 +389,44 @@ impl LyricsWindow {
         }
     }
 
-    fn get_text_to_render(&mut self) -> String {
+    async fn get_text_to_render(&mut self) -> String {
         let itunes = &self.itunes;
         let lyrics = &mut self.lyrics;
 
+        if !itunes.is_playing() {
+            return "".to_string();
+        }
+
         // We should conduct the interpolation because iTunes only provides precision to seconds.
-        let mut player_position = itunes.get_player_position();
-        if !itunes.is_playing() || player_position != self.last_player_position {
-            self.last_player_position = player_position;
+        let player_position = itunes.get_player_position();
+        if player_position.is_none() {
+            return "".to_string();
+        }
+        let mut player_position = player_position.unwrap();
+        if Some(player_position) != self.last_player_position {
+            self.last_player_position = Some(player_position);
             self.last_updated_at = SystemTime::now();
-        } else if let Some(value) = player_position {
+        } else {
             let elapsed = self
                 .last_updated_at
                 .elapsed()
                 .unwrap()
                 .min(Duration::from_secs(1));
-            player_position = Some(value + elapsed);
+            player_position += elapsed;
         }
 
-        if itunes.is_playing() {
-            itunes
-                .get_current_track_info()
-                .and_then(|TrackInfo { name, artist }| {
-                    player_position.and_then(|duration| {
-                        lyrics
-                            .get_lyrics_line(&name, &artist, duration)
-                            .unwrap_or_default()
-                    })
-                })
+        if let Some(TrackInfo { name, artist }) = itunes.get_current_track_info() {
+            lyrics
+                .get_lyrics_line(&name, &artist, player_position)
+                .await
+                .unwrap_or_default()
+                .unwrap_or_default()
         } else {
-            None
+            "".to_string()
         }
-        .unwrap_or_default()
     }
 
-    fn draw(&mut self) -> windows::Result<()> {
+    async fn draw(&mut self) -> windows::Result<()> {
         unsafe {
             let dc = &self.context;
             dc.BeginDraw();
@@ -435,7 +438,7 @@ impl LyricsWindow {
                 a: 0.,
             });
 
-            let text_to_render = self.get_text_to_render();
+            let text_to_render = self.get_text_to_render().await;
             let dc = &self.context;
             let dwrite_factory = &self.dwrite_factory;
             if !text_to_render.is_empty() {

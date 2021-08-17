@@ -10,7 +10,8 @@ use bindings::Windows::Win32::System::Diagnostics::Debug::*;
 use bindings::Windows::Win32::System::Threading::*;
 use bindings::Windows::Win32::UI::WindowsAndMessaging::*;
 
-fn main() -> windows::Result<()> {
+#[tokio::main]
+async fn main() -> windows::Result<()> {
     unsafe {
         SetProcessDPIAware();
         CoInitialize(ptr::null_mut())?;
@@ -37,7 +38,7 @@ fn main() -> windows::Result<()> {
 
     app.show()?;
 
-    app.run_message_loop();
+    app.run_message_loop().await;
 
     Ok(())
 }

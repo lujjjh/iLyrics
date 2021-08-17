@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use reqwest::blocking::Client;
+use reqwest::Client;
 
 pub struct Lyrics {
     client: Client,
@@ -23,7 +23,7 @@ impl Lyrics {
         }
     }
 
-    pub fn get_lyrics_line(
+    pub async fn get_lyrics_line(
         &mut self,
         name: &str,
         artist: &str,
@@ -37,8 +37,10 @@ impl Lyrics {
                 .client
                 .get("https://lyrics-api.lujjjh.com/")
                 .query(&[("name", name), ("artist", artist)])
-                .send()?
-                .text()?;
+                .send()
+                .await?
+                .text()
+                .await?;
             let lyrics = lrc::Lyrics::from_str(body)?;
             self.lines = lyrics
                 .get_timed_lines()
@@ -62,19 +64,21 @@ impl Lyrics {
     }
 }
 
-#[test]
-fn test_get_lyrics() {
+#[tokio::test]
+async fn test_get_lyrics() {
     let mut lyrics = Lyrics::new();
     println!(
         "{:?}",
         lyrics
             .get_lyrics_line("Lemon Tree", "Fool's Garden", Duration::from_secs(30))
+            .await
             .unwrap()
     );
     println!(
         "{:?}",
         lyrics
             .get_lyrics_line("Lemon Tree", "Fool's Garden", Duration::from_secs(40))
+            .await
             .unwrap()
     );
 }
