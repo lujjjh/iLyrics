@@ -33,8 +33,6 @@ pub struct LyricsWindow {
     fg_brush: ID2D1SolidColorBrush,
     itunes: ITunes,
     lyrics: Lyrics,
-    last_player_position: Option<Duration>,
-    last_updated_at: SystemTime,
 }
 
 const CLASS_NAME: PWSTR = PWSTR(utf16_null!("iTunesMate").as_ptr() as *mut u16);
@@ -137,8 +135,6 @@ impl LyricsWindow {
                 fg_brush,
                 itunes: ITunes::new()?,
                 lyrics: Lyrics::new(),
-                last_player_position: None,
-                last_updated_at: SystemTime::now(),
             })
         }
     }
@@ -397,23 +393,11 @@ impl LyricsWindow {
             return "".to_string();
         }
 
-        // We should conduct the interpolation because iTunes only provides precision to seconds.
         let player_position = itunes.get_player_position();
         if player_position.is_none() {
             return "".to_string();
         }
-        let mut player_position = player_position.unwrap();
-        if Some(player_position) != self.last_player_position {
-            self.last_player_position = Some(player_position);
-            self.last_updated_at = SystemTime::now();
-        } else {
-            let elapsed = self
-                .last_updated_at
-                .elapsed()
-                .unwrap()
-                .min(Duration::from_secs(1));
-            player_position += elapsed;
-        }
+        let player_position = player_position.unwrap();
 
         if let Some(TrackInfo { name, artist }) = itunes.get_current_track_info() {
             lyrics

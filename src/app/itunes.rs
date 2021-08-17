@@ -64,8 +64,8 @@ impl ITunes {
     pub fn get_player_position(&self) -> Option<Duration> {
         unsafe {
             self.get_instance()
-                .GetPlayerPosition()
-                .map(|secs| Some(Duration::from_secs(secs as u64)))
+                .GetPlayerPositionMS()
+                .map(|ms| Some(Duration::from_millis(ms as u64)))
                 .unwrap_or(None)
         }
     }
@@ -156,6 +156,35 @@ struct IiTunes_abi(
     pub unsafe extern "system" fn(this: RawPtr) -> HRESULT,
     pub unsafe extern "system" fn(this: RawPtr) -> HRESULT,
     pub unsafe extern "system" fn(this: RawPtr, track: *mut RawPtr) -> HRESULT,
+    pub unsafe extern "system" fn(this: RawPtr) -> HRESULT,
+    pub unsafe extern "system" fn(this: RawPtr) -> HRESULT,
+    pub unsafe extern "system" fn(this: RawPtr) -> HRESULT,
+    pub unsafe extern "system" fn(this: RawPtr) -> HRESULT,
+    pub unsafe extern "system" fn(this: RawPtr) -> HRESULT,
+    pub unsafe extern "system" fn(this: RawPtr) -> HRESULT,
+    pub unsafe extern "system" fn(this: RawPtr) -> HRESULT,
+    pub unsafe extern "system" fn(this: RawPtr) -> HRESULT,
+    pub unsafe extern "system" fn(this: RawPtr) -> HRESULT,
+    pub unsafe extern "system" fn(this: RawPtr) -> HRESULT,
+    pub unsafe extern "system" fn(this: RawPtr) -> HRESULT,
+    pub unsafe extern "system" fn(this: RawPtr) -> HRESULT,
+    pub unsafe extern "system" fn(this: RawPtr) -> HRESULT,
+    pub unsafe extern "system" fn(this: RawPtr) -> HRESULT,
+    pub unsafe extern "system" fn(this: RawPtr) -> HRESULT,
+    pub unsafe extern "system" fn(this: RawPtr) -> HRESULT,
+    pub unsafe extern "system" fn(this: RawPtr) -> HRESULT,
+    pub unsafe extern "system" fn(this: RawPtr) -> HRESULT,
+    pub unsafe extern "system" fn(this: RawPtr) -> HRESULT,
+    pub unsafe extern "system" fn(this: RawPtr) -> HRESULT,
+    pub unsafe extern "system" fn(this: RawPtr) -> HRESULT,
+    pub unsafe extern "system" fn(this: RawPtr) -> HRESULT,
+    pub unsafe extern "system" fn(this: RawPtr) -> HRESULT,
+    pub unsafe extern "system" fn(this: RawPtr) -> HRESULT,
+    pub unsafe extern "system" fn(this: RawPtr) -> HRESULT,
+    pub unsafe extern "system" fn(this: RawPtr) -> HRESULT,
+    pub unsafe extern "system" fn(this: RawPtr) -> HRESULT,
+    pub unsafe extern "system" fn(this: RawPtr) -> HRESULT,
+    pub unsafe extern "system" fn(this: RawPtr, value: *mut i64) -> HRESULT,
 );
 
 unsafe impl Interface for IiTunes {
@@ -177,9 +206,9 @@ impl IiTunes {
         Ok(value)
     }
 
-    pub unsafe fn GetPlayerPosition(&self) -> Result<i64> {
+    pub unsafe fn GetPlayerPositionMS(&self) -> Result<i64> {
         let mut value: i64 = 0;
-        (Interface::vtable(self).40)(Abi::abi(self), &mut value).ok()?;
+        (Interface::vtable(self).91)(Abi::abi(self), &mut value).ok()?;
         Ok(value)
     }
 
