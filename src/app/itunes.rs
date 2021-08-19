@@ -2,6 +2,7 @@ use std::intrinsics::transmute;
 use std::mem;
 use std::ptr::null_mut;
 use std::time::Duration;
+use std::time::SystemTime;
 
 use bindings::Windows::Win32::Foundation::*;
 use bindings::Windows::Win32::System::Com::*;
@@ -18,7 +19,13 @@ const ITUNES_CLSID: Guid = Guid::from_values(
     [0x87, 0x5C, 0x6F, 0x4D, 0x76, 0x98, 0x39, 0xBA],
 );
 
-pub struct ITunes(IiTunes);
+pub struct ITunes {
+    instance: IiTunes,
+
+    // last_player_position interpolation.
+    last_player_position: Option<Duration>,
+    last_player_position_updated_at: SystemTime,
+}
 
 impl ITunes {
     pub fn new() -> windows::Result<Self> {
@@ -30,12 +37,16 @@ impl ITunes {
                 connection_point_container.FindConnectionPoint(&I_ITUNES_EVENTS_IID)?;
             let itunes_events = ITunesImplementation::new();
             connection_point.Advise(itunes_events)?;
-            Ok(Self(instance))
+            Ok(Self {
+                instance,
+                last_player_position: None,
+                last_player_position_updated_at: SystemTime::now(),
+            })
         }
     }
 
     fn get_instance(&self) -> &IiTunes {
-        &self.0
+        &self.instance
     }
 
     pub fn is_playing(&self) -> bool {
@@ -61,14 +72,27 @@ impl ITunes {
         }
     }
 
-    pub fn get_player_position(&self) -> Option<Duration> {
-        unsafe {
+    pub fn get_player_position(&mut self) -> Option<Duration> {
+        let player_position = unsafe {
             self.get_instance()
                 .GetPlayerPositionMS()
                 // There appears to be a delay in iTunes' PlayerPositionMS.
                 .map(|ms| Some(Duration::from_millis(ms as u64) + Duration::from_millis(350)))
                 .unwrap_or(None)
+        };
+        // iTunes' PlayerPositionMS is not continuous. We still have to do the interpolation.
+        if player_position != self.last_player_position {
+            self.last_player_position = player_position;
+            self.last_player_position_updated_at = SystemTime::now();
         }
+        player_position.map(|value| {
+            value
+                + self
+                    .last_player_position_updated_at
+                    .elapsed()
+                    .unwrap()
+                    .min(Duration::from_secs(1))
+        })
     }
 }
 

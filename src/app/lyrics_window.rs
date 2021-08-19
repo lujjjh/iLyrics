@@ -386,7 +386,7 @@ impl LyricsWindow {
     }
 
     async fn get_text_to_render(&mut self) -> String {
-        let itunes = &self.itunes;
+        let itunes = &mut self.itunes;
         let lyrics = &mut self.lyrics;
 
         if !itunes.is_playing() {
