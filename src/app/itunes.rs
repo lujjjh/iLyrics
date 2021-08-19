@@ -65,7 +65,8 @@ impl ITunes {
         unsafe {
             self.get_instance()
                 .GetPlayerPositionMS()
-                .map(|ms| Some(Duration::from_millis(ms as u64)))
+                // There appears to be a delay in iTunes' PlayerPositionMS.
+                .map(|ms| Some(Duration::from_millis(ms as u64) + Duration::from_millis(350)))
                 .unwrap_or(None)
         }
     }
