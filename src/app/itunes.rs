@@ -6,7 +6,6 @@ use std::time::SystemTime;
 
 use bindings::Windows::Win32::Foundation::*;
 use bindings::Windows::Win32::System::Com::*;
-use bindings::Windows::Win32::System::OleAutomation::*;
 use windows::*;
 
 use super::itunes_events::ITunesImplementation;
@@ -110,7 +109,9 @@ pub struct TrackInfo {
     pub artist: String,
 }
 
-struct IiTunes(IDispatch);
+#[repr(transparent)]
+#[derive(Clone, PartialEq, Eq)]
+struct IiTunes(IUnknown);
 
 #[repr(C)]
 #[allow(non_camel_case_types)]
@@ -248,7 +249,9 @@ impl IiTunes {
     }
 }
 
-struct IITTrack(IDispatch);
+#[repr(transparent)]
+#[derive(Clone, PartialEq, Eq)]
+struct IITTrack(IUnknown);
 
 #[repr(C)]
 #[allow(non_camel_case_types)]
