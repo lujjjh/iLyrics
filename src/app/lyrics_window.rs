@@ -35,7 +35,7 @@ pub struct LyricsWindow {
     lyrics: Lyrics,
 }
 
-const CLASS_NAME: PWSTR = PWSTR(utf16_null!("iTunesMate").as_ptr() as *mut u16);
+const CLASS_NAME: PWSTR = PWSTR(utf16_null!("iLyrics").as_ptr() as *mut u16);
 
 impl LyricsWindow {
     pub fn new() -> windows::Result<Self> {
@@ -480,11 +480,5 @@ impl LyricsWindow {
     fn handle_destroy(&self, _hwnd: HWND, _msg: u32, _wparam: WPARAM, _lparam: LPARAM) -> LRESULT {
         unsafe { PostQuitMessage(0) };
         LRESULT(1)
-    }
-}
-
-impl Drop for LyricsWindow {
-    fn drop(&mut self) {
-        unsafe { CoUninitialize() };
     }
 }

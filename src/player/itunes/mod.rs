@@ -1,15 +1,19 @@
 use std::intrinsics::transmute;
 use std::mem;
+use std::mem::transmute_copy;
 use std::ptr::null_mut;
+use std::ptr::NonNull;
 use std::time::Duration;
 use std::time::SystemTime;
 
 use bindings::Windows::Win32::Foundation::*;
 use bindings::Windows::Win32::System::Com::*;
+use bindings::Windows::Win32::System::OleAutomation::*;
+use bindings::Windows::Win32::UI::WindowsAndMessaging::*;
 use windows::*;
 
-use super::itunes_events::ITunesImplementation;
-use super::itunes_events::I_ITUNES_EVENTS_IID;
+use super::Player;
+use super::PlayerState;
 
 const ITUNES_CLSID: Guid = Guid::from_values(
     0xDC0C2640,
@@ -24,6 +28,20 @@ pub struct ITunes {
     // last_player_position interpolation.
     last_player_position: Option<Duration>,
     last_player_position_updated_at: SystemTime,
+}
+
+impl Player for ITunes {
+    fn get_player_state(&mut self) -> Option<PlayerState> {
+        let current_track_info = self.get_current_track_info();
+        let player_position = self.get_player_position();
+        current_track_info.and_then(|track_info| {
+            player_position.map(|player_position| PlayerState {
+                song_name: track_info.name,
+                song_artist: track_info.artist,
+                player_position,
+            })
+        })
+    }
 }
 
 impl ITunes {
