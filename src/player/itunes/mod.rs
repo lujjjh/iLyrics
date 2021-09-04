@@ -32,6 +32,9 @@ pub struct ITunes {
 
 impl Player for ITunes {
     fn get_player_state(&mut self) -> Option<PlayerState> {
+        if !self.is_playing() {
+            return None;
+        }
         let current_track_info = self.get_current_track_info();
         let player_position = self.get_player_position();
         current_track_info.and_then(|track_info| {

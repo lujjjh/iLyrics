@@ -27,6 +27,10 @@ const WINDOW_HEIGHT: i32 = 80;
 const PADDING_HORIZONTAL: f64 = 10.;
 const PADDING_VERTICAL: f64 = 5.;
 
+const DURATION_OPACITY: Duration = Duration::from_millis(100);
+const DURATION_SIZING: Duration = Duration::from_millis(200);
+const DURATION_SCROLLING: Duration = Duration::from_millis(350);
+
 struct Resources {
     d2d_factory: ID2D1Factory2,
     dc: ID2D1DeviceContext,
@@ -39,9 +43,12 @@ struct Resources {
     animation_manager: IUIAnimationManager,
     animation_timer: IUIAnimationTimer,
     animation_transition_library: IUIAnimationTransitionLibrary,
+    opacity: IUIAnimationVariable,
     bg_width: IUIAnimationVariable,
     bg_height: IUIAnimationVariable,
-    line_vertical_offset: IUIAnimationVariable,
+    line_current_offset: IUIAnimationVariable,
+    line_next_offset: IUIAnimationVariable,
+    line_next_opacity: IUIAnimationVariable,
 }
 
 pub struct LyricsWindow {
@@ -157,76 +164,94 @@ impl LyricsWindow {
                 let line_current = lyrics
                     .find_timed_line_index(player_position.as_millis() as i64)
                     .map(|index| lyrics.get_timed_lines()[index].1.to_string());
-                let line_next = lyrics
-                    .find_timed_line_index(player_position.as_millis() as i64 + 200)
-                    .map(|index| lyrics.get_timed_lines()[index].1.to_string());
+                let line_next =
+                    lyrics
+                        .find_timed_line_index(
+                            (player_position + DURATION_SCROLLING).as_millis() as i64
+                        )
+                        .map(|index| lyrics.get_timed_lines()[index].1.to_string());
                 if self.line_current != line_current {
                     self.line_current = line_current;
                 }
                 if self.line_next != line_next {
                     self.line_next = line_next;
-                    self.update_bg_rectangle(self.line_next.as_ref())?;
+                    self.schedule_transitions(self.line_next.as_ref())?;
                 }
                 return Ok(());
             }
         }
         self.line_next = None;
-        self.update_bg_rectangle(None)?;
+        self.schedule_transitions(None)?;
         Ok(())
     }
 
-    fn update_bg_rectangle(&self, line_next: Option<&String>) -> Result<()> {
+    fn schedule_transitions(&self, line_next: Option<&String>) -> Result<()> {
         let Resources {
             dc,
             animation_manager,
             animation_timer,
             animation_transition_library,
+            opacity,
             bg_width,
             bg_height,
-            line_vertical_offset,
+            line_current_offset,
+            line_next_offset,
+            line_next_opacity,
             ..
         } = self.get_or_init_resources()?;
-        match line_next {
-            Some(line_next) => {
-                let size = unsafe { dc.GetSize() };
-                let metrics = self.get_text_metrics(line_next, size.width, size.height)?;
-                unsafe {
-                    let transition_bg_width = animation_transition_library
-                        .CreateAccelerateDecelerateTransition(
-                            0.2,
-                            metrics.width as f64 + 2. * PADDING_HORIZONTAL,
-                            0.5,
-                            0.5,
-                        )?;
-                    let transition_bg_height = animation_transition_library
-                        .CreateAccelerateDecelerateTransition(
-                            0.2,
-                            metrics.height as f64 + 2. * PADDING_VERTICAL,
-                            0.5,
-                            0.5,
-                        )?;
-                    let transition_line_vertical_offset = animation_transition_library
-                        .CreateAccelerateDecelerateTransition(0.2, -size.height as f64, 0.5, 0.5)?;
-                    transition_line_vertical_offset.SetInitialValue(0.)?;
-                    let time_now = animation_timer.GetTime()?;
-                    animation_manager.ScheduleTransition(
-                        bg_width,
-                        &transition_bg_width,
-                        time_now,
-                    )?;
-                    animation_manager.ScheduleTransition(
-                        bg_height,
-                        &transition_bg_height,
-                        time_now,
-                    )?;
-                    animation_manager.ScheduleTransition(
-                        line_vertical_offset,
-                        &transition_line_vertical_offset,
-                        time_now,
-                    )?;
+        let time_now = unsafe { animation_timer.GetTime() }?;
+        let do_transition = |variable: &IUIAnimationVariable,
+                             duration: Duration,
+                             initial_value: Option<f64>,
+                             final_value: f64,
+                             skip_if_hidden: bool|
+         -> Result<()> {
+            let duration = duration.as_secs_f64();
+            unsafe {
+                let transition = animation_transition_library
+                    .CreateAccelerateDecelerateTransition(duration, final_value, 0.3, 0.3)?;
+                if let Some(initial_value) = initial_value {
+                    transition.SetInitialValue(initial_value)?;
                 }
+                if skip_if_hidden && opacity.GetValue()? == 0. {
+                    transition.SetInitialValue(final_value)?;
+                }
+                animation_manager.ScheduleTransition(variable, &transition, time_now)
             }
-            None => {}
+        };
+        match line_next {
+            Some(line_next) if line_next != "" => {
+                let size = unsafe { dc.GetSize() };
+                do_transition(opacity, DURATION_OPACITY, None, 1., false)?;
+
+                let metrics = self.get_text_metrics(line_next, size.width, size.height)?;
+                let final_bg_width = metrics.width as f64 + 2. * PADDING_HORIZONTAL;
+                do_transition(bg_width, DURATION_SIZING, None, final_bg_width, true)?;
+
+                let final_bg_height = metrics.height as f64 + 2. * PADDING_VERTICAL;
+                do_transition(bg_height, DURATION_SIZING, None, final_bg_height, true)?;
+
+                let vertical_offset = size.height as f64 / 3.;
+                do_transition(
+                    line_current_offset,
+                    DURATION_SCROLLING,
+                    Some(0.),
+                    -vertical_offset,
+                    true,
+                )?;
+                do_transition(
+                    line_next_offset,
+                    DURATION_SCROLLING,
+                    Some(vertical_offset),
+                    0.,
+                    true,
+                )?;
+
+                do_transition(line_next_opacity, DURATION_SCROLLING, Some(0.), 1., true)?;
+            }
+            _ => {
+                do_transition(opacity, DURATION_OPACITY, None, 0., false)?;
+            }
         }
         Ok(())
     }
@@ -317,9 +342,12 @@ impl LyricsWindow {
                 )
             }?;
             let animation_transition_library = create_animation_transition_library()?;
+            let opacity = unsafe { animation_manager.CreateAnimationVariable(0.) }?;
             let bg_width = unsafe { animation_manager.CreateAnimationVariable(0.) }?;
             let bg_height = unsafe { animation_manager.CreateAnimationVariable(0.) }?;
-            let line_vertical_offset = unsafe { animation_manager.CreateAnimationVariable(0.) }?;
+            let line_current_offset = unsafe { animation_manager.CreateAnimationVariable(0.) }?;
+            let line_next_offset = unsafe { animation_manager.CreateAnimationVariable(0.) }?;
+            let line_next_opacity = unsafe { animation_manager.CreateAnimationVariable(0.) }?;
             Ok(Resources {
                 d2d_factory,
                 dc,
@@ -332,9 +360,12 @@ impl LyricsWindow {
                 animation_manager,
                 animation_timer,
                 animation_transition_library,
+                opacity,
                 bg_width,
                 bg_height,
-                line_vertical_offset,
+                line_current_offset,
+                line_next_offset,
+                line_next_opacity,
             })
         })
     }
@@ -345,9 +376,12 @@ impl LyricsWindow {
             dc,
             swap_chain,
             brush,
+            opacity,
             bg_width,
             bg_height,
-            line_vertical_offset,
+            line_current_offset,
+            line_next_offset,
+            line_next_opacity,
             ..
         } = self.get_or_init_resources()?;
         let Self {
@@ -358,6 +392,24 @@ impl LyricsWindow {
         unsafe {
             dc.BeginDraw();
             dc.Clear(null_mut());
+            let opacity = opacity.GetValue()? as f32;
+            dc.PushLayer(
+                &D2D1_LAYER_PARAMETERS {
+                    contentBounds: D2D_RECT_F {
+                        left: -f32::INFINITY,
+                        top: -f32::INFINITY,
+                        right: f32::INFINITY,
+                        bottom: f32::INFINITY,
+                    },
+                    geometricMask: None,
+                    maskAntialiasMode: D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+                    maskTransform: Matrix3x2::identity(),
+                    opacity,
+                    opacityBrush: None,
+                    layerOptions: D2D1_LAYER_OPTIONS_NONE,
+                },
+                None,
+            );
             brush.SetColor(&D2D1_COLOR_F {
                 r: 0.,
                 g: 0.,
@@ -383,6 +435,8 @@ impl LyricsWindow {
             };
             let bg_geometry = d2d_factory.CreateRoundedRectangleGeometry(bg_rounded_rect)?;
             dc.FillGeometry(&bg_geometry, brush, None);
+            let line_next_opacity = line_next_opacity.GetValue()? as f32;
+            let line_current_opacity = 1. - line_next_opacity;
             dc.PushLayer(
                 &D2D1_LAYER_PARAMETERS {
                     contentBounds: D2D_RECT_F {
@@ -391,44 +445,65 @@ impl LyricsWindow {
                         right: f32::INFINITY,
                         bottom: f32::INFINITY,
                     },
-                    geometricMask: Some(bg_geometry.into()),
+                    geometricMask: Some((&bg_geometry).into()),
                     maskAntialiasMode: D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
                     maskTransform: Matrix3x2::identity(),
-                    opacity: 1.,
+                    opacity: line_current_opacity,
                     opacityBrush: None,
                     layerOptions: D2D1_LAYER_OPTIONS_NONE,
                 },
                 None,
             );
-            let line_vertical_offset = line_vertical_offset.GetValue()? as f32;
+            let line_current_offset = line_current_offset.GetValue()? as f32;
+            let line_next_offset = line_next_offset.GetValue()? as f32;
             if let Some(line_current) = line_current {
                 self.draw_text(
                     line_current,
                     &D2D_RECT_F {
                         left: 0.,
-                        top: line_vertical_offset,
+                        top: line_current_offset,
                         right: size.width,
-                        bottom: line_vertical_offset + size.height,
+                        bottom: line_current_offset + size.height,
                     },
                 )?;
             }
+            dc.PopLayer();
+            dc.PushLayer(
+                &D2D1_LAYER_PARAMETERS {
+                    contentBounds: D2D_RECT_F {
+                        left: -f32::INFINITY,
+                        top: -f32::INFINITY,
+                        right: f32::INFINITY,
+                        bottom: f32::INFINITY,
+                    },
+                    geometricMask: Some((&bg_geometry).into()),
+                    maskAntialiasMode: D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+                    maskTransform: Matrix3x2::identity(),
+                    opacity: line_next_opacity,
+                    opacityBrush: None,
+                    layerOptions: D2D1_LAYER_OPTIONS_NONE,
+                },
+                None,
+            );
             if let Some(line_next) = line_next {
                 self.draw_text(
                     line_next,
                     &D2D_RECT_F {
                         left: 0.,
-                        top: line_vertical_offset + size.height,
+                        top: line_next_offset,
                         right: size.width,
-                        bottom: line_vertical_offset + size.height * 2.,
+                        bottom: line_next_offset + size.height,
                     },
                 )?;
             }
+            dc.PopLayer();
             dc.PopLayer();
             dc.EndDraw(null_mut(), null_mut())?;
             swap_chain.Present(0, 0)?;
         }
         Ok(())
     }
+
     fn create_text_layout(
         &self,
         text: &str,
