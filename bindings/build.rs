@@ -12,6 +12,7 @@ fn main() {
         Windows::Win32::System::SystemServices::*,
         Windows::Win32::System::LibraryLoader::*,
         Windows::Win32::System::Threading::*,
+        Windows::Win32::UI::Animation::*,
         Windows::Win32::UI::WindowsAndMessaging::*,
     };
 }

@@ -1,10 +1,10 @@
-# iTunes Desktop Lyrics for Windows
+# iLyrics
 
 A third-party iTunes addon to show the lyrics on the desktop.
 
 ## Preview
 
-<img width="1920" src="preview.png" alt="iTunes Desktop Lyrics for Windows" />
+<img width="1920" src="preview.png" alt="iLyrics" />
 
 ## Prerequisites
 
@@ -12,12 +12,12 @@ A third-party iTunes addon to show the lyrics on the desktop.
 
 ## Usage
 
-1. [Download the binary](https://github.com/lujjjh/itunes-desktop-lyrics-windows/releases/latest/download/itunes-desktop-lyrics-windows.exe) or [build from source](#build).
-2. Run `itunes-desktop-lyrics-windows.exe`.
+1. [Download the binary](https://github.com/lujjjh/itunes-desktop-lyrics-windows/releases/latest) or [build from source](#build).
+2. Run `ilyrics.exe`.
 
 ## How to close the program?
 
-Simply close iTunes, and iTunes Desktop Lyrics will close on its own.
+Simply close iTunes, and iLyrics will close on its own.
 
 ## Build
 
