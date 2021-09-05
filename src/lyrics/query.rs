@@ -38,7 +38,25 @@ impl Query {
                 .query(&[("name", name), ("artist", artist)])
                 .send()?
                 .text()?;
-            *lyrics = Some(lrc::Lyrics::from_str(body)?);
+            let downloaded_lyrics = Lyrics::from_str(body)?;
+            let mut new_lyrics = Lyrics::new();
+            let timed_lines = downloaded_lyrics.get_timed_lines();
+            for (i, (time_tag, line)) in timed_lines.iter().enumerate() {
+                let line = html_escape::decode_html_entities(&line);
+                let text = line.trim();
+                // Skip empty lines that last no longer than 3s.
+                if text.is_empty() {
+                    if i < timed_lines.len() - 1 {
+                        let duration =
+                            timed_lines[i + 1].0.get_timestamp() - time_tag.get_timestamp();
+                        if duration <= 3000 {
+                            continue;
+                        }
+                    }
+                }
+                new_lyrics.add_timed_line(time_tag.clone(), line)?;
+            }
+            *lyrics = Some(new_lyrics);
             Ok(true)
 
             // self.lines = lyrics

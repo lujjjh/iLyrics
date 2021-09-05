@@ -27,7 +27,8 @@ const WINDOW_HEIGHT: i32 = 80;
 const PADDING_HORIZONTAL: f64 = 10.;
 const PADDING_VERTICAL: f64 = 5.;
 
-const DURATION_OPACITY: Duration = Duration::from_millis(100);
+const DURATION_FADE_IN: Duration = Duration::from_millis(100);
+const DURATION_FADE_OUT: Duration = Duration::from_millis(1000);
 const DURATION_SIZING: Duration = Duration::from_millis(200);
 const DURATION_SCROLLING: Duration = Duration::from_millis(350);
 
@@ -60,6 +61,7 @@ pub struct LyricsWindow {
     player_position: Option<Duration>,
     line_current: Option<String>,
     line_next: Option<String>,
+    line_next_non_empty: Option<String>,
 }
 
 impl Window for LyricsWindow {
@@ -103,10 +105,12 @@ impl LyricsWindow {
             player_position: None,
             line_current: None,
             line_next: None,
+            line_next_non_empty: None,
         })
     }
 
     pub fn show(&mut self) -> Result<()> {
+        unsafe { SetLayeredWindowAttributes(self.hwnd, 0, 255, LWA_ALPHA) };
         Window::show(self, SW_SHOWNOACTIVATE)?;
         self.draw()?;
         self.set_lyrics_timer()?;
@@ -173,8 +177,22 @@ impl LyricsWindow {
                 if self.line_current != line_current {
                     self.line_current = line_current;
                 }
-                if self.line_next != line_next {
-                    self.line_next = line_next;
+                // If the next line is empty, we'd like to delay the animation
+                // until the next line becomes the current line.
+                let line_next = match line_next.as_ref() {
+                    Some(line_next) if !line_next.is_empty() => Some(line_next),
+                    _ => self.line_current.as_ref(),
+                };
+                if self.line_next.as_ref() != line_next {
+                    self.line_next = line_next.map(|s| s.clone());
+                    if !self
+                        .line_next
+                        .as_ref()
+                        .map(|s| s.is_empty())
+                        .unwrap_or_default()
+                    {
+                        self.line_next_non_empty = self.line_next.clone();
+                    }
                     self.schedule_transitions(self.line_next.as_ref())?;
                 }
                 return Ok(());
@@ -200,16 +218,26 @@ impl LyricsWindow {
             ..
         } = self.get_or_init_resources()?;
         let time_now = unsafe { animation_timer.GetTime() }?;
-        let do_transition = |variable: &IUIAnimationVariable,
-                             duration: Duration,
-                             initial_value: Option<f64>,
-                             final_value: f64,
-                             skip_if_hidden: bool|
+        let _do_transition = |variable: &IUIAnimationVariable,
+                              duration: Duration,
+                              initial_value: Option<f64>,
+                              final_value: f64,
+                              skip_if_hidden: bool,
+                              acceleration_ratio: f64,
+                              deceleration_ratio: f64|
          -> Result<()> {
+            if initial_value.is_none() && unsafe { variable.GetFinalValue() }? == final_value {
+                return Ok(());
+            }
             let duration = duration.as_secs_f64();
             unsafe {
                 let transition = animation_transition_library
-                    .CreateAccelerateDecelerateTransition(duration, final_value, 0.3, 0.3)?;
+                    .CreateAccelerateDecelerateTransition(
+                        duration,
+                        final_value,
+                        acceleration_ratio,
+                        deceleration_ratio,
+                    )?;
                 if let Some(initial_value) = initial_value {
                     transition.SetInitialValue(initial_value)?;
                 }
@@ -219,27 +247,59 @@ impl LyricsWindow {
                 animation_manager.ScheduleTransition(variable, &transition, time_now)
             }
         };
+        let do_transition_ease_out = |variable: &IUIAnimationVariable,
+                                      duration: Duration,
+                                      initial_value: Option<f64>,
+                                      final_value: f64,
+                                      skip_if_hidden: bool|
+         -> Result<()> {
+            _do_transition(
+                variable,
+                duration,
+                initial_value,
+                final_value,
+                skip_if_hidden,
+                0.,
+                1.,
+            )
+        };
+        let do_transition_ease_in = |variable: &IUIAnimationVariable,
+                                     duration: Duration,
+                                     initial_value: Option<f64>,
+                                     final_value: f64,
+                                     skip_if_hidden: bool|
+         -> Result<()> {
+            _do_transition(
+                variable,
+                duration,
+                initial_value,
+                final_value,
+                skip_if_hidden,
+                1.,
+                0.,
+            )
+        };
         match line_next {
-            Some(line_next) if line_next != "" => {
+            Some(line_next) if !line_next.is_empty() => {
                 let size = unsafe { dc.GetSize() };
-                do_transition(opacity, DURATION_OPACITY, None, 1., false)?;
+                do_transition_ease_out(opacity, DURATION_FADE_IN, None, 1., false)?;
 
                 let metrics = self.get_text_metrics(line_next, size.width, size.height)?;
                 let final_bg_width = metrics.width as f64 + 2. * PADDING_HORIZONTAL;
-                do_transition(bg_width, DURATION_SIZING, None, final_bg_width, true)?;
+                do_transition_ease_out(bg_width, DURATION_SIZING, None, final_bg_width, true)?;
 
                 let final_bg_height = metrics.height as f64 + 2. * PADDING_VERTICAL;
-                do_transition(bg_height, DURATION_SIZING, None, final_bg_height, true)?;
+                do_transition_ease_out(bg_height, DURATION_SIZING, None, final_bg_height, true)?;
 
                 let vertical_offset = size.height as f64 / 3.;
-                do_transition(
+                do_transition_ease_out(
                     line_current_offset,
                     DURATION_SCROLLING,
                     Some(0.),
                     -vertical_offset,
                     true,
                 )?;
-                do_transition(
+                do_transition_ease_out(
                     line_next_offset,
                     DURATION_SCROLLING,
                     Some(vertical_offset),
@@ -247,10 +307,10 @@ impl LyricsWindow {
                     true,
                 )?;
 
-                do_transition(line_next_opacity, DURATION_SCROLLING, Some(0.), 1., true)?;
+                do_transition_ease_out(line_next_opacity, DURATION_SCROLLING, Some(0.), 1., true)?;
             }
             _ => {
-                do_transition(opacity, DURATION_OPACITY, None, 0., false)?;
+                do_transition_ease_in(opacity, DURATION_FADE_OUT, None, 0., false)?;
             }
         }
         Ok(())
@@ -307,7 +367,7 @@ impl LyricsWindow {
                     HSTRING::from("Segoe UI Emoji"),
                     HSTRING::from("Segoe UI Symbol"),
                     HSTRING::from("Helvetica"),
-                    HSTRING::from("Microsoft Yahei"),
+                    HSTRING::from("Microsoft YaHei UI"),
                 ];
                 let fallback_family_names = fallback_family_names
                     .iter()
@@ -386,7 +446,7 @@ impl LyricsWindow {
         } = self.get_or_init_resources()?;
         let Self {
             line_current,
-            line_next,
+            line_next_non_empty,
             ..
         } = self;
         unsafe {
@@ -485,7 +545,7 @@ impl LyricsWindow {
                 },
                 None,
             );
-            if let Some(line_next) = line_next {
+            if let Some(line_next) = line_next_non_empty {
                 self.draw_text(
                     line_next,
                     &D2D_RECT_F {
