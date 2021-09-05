@@ -33,12 +33,12 @@ impl Query {
     ) -> Result<bool, Box<dyn std::error::Error>> {
         let query = format!("{} {}", name, artist);
         if self.last_query != query {
+            self.last_query = query;
             if name.is_empty() || artist.is_empty() {
                 *lyrics = None;
                 return Ok(true);
             }
-            info!("{}", &query);
-            self.last_query = query;
+            info!("{}", &self.last_query);
             *lyrics = None;
             let response = self
                 .client
