@@ -1,5 +1,8 @@
 use std::time::Duration;
 
+use log::error;
+use log::info;
+use log::warn;
 use lrc::Lyrics;
 use reqwest::blocking::Client;
 
@@ -30,15 +33,36 @@ impl Query {
     ) -> Result<bool, Box<dyn std::error::Error>> {
         let query = format!("{} {}", name, artist);
         if self.last_query != query {
+            if name.is_empty() || artist.is_empty() {
+                *lyrics = None;
+                return Ok(true);
+            }
+            info!("{}", &query);
             self.last_query = query;
             *lyrics = None;
-            let body = self
+            let response = self
                 .client
                 .get("https://lyrics-api.lujjjh.com/")
                 .query(&[("name", name), ("artist", artist)])
-                .send()?
-                .text()?;
-            let downloaded_lyrics = Lyrics::from_str(body)?;
+                .send()
+                .map_err(|e| {
+                    error!("Network error: {:?}", e);
+                    e
+                })?
+                .error_for_status()
+                .map_err(|e| {
+                    warn!("Bad status: {:?}", e);
+                    e
+                })?;
+            let body = response.text().map_err(|e| {
+                error!("Failed to read response body: {:?}", e);
+                e
+            })?;
+            let downloaded_lyrics = Lyrics::from_str(body).map_err(|e| {
+                error!("Failed to parse lyrics: {:?}", e);
+                e
+            })?;
+            info!("OK");
             let mut new_lyrics = Lyrics::new();
             let timed_lines = downloaded_lyrics.get_timed_lines();
             for (i, (time_tag, line)) in timed_lines.iter().enumerate() {
@@ -58,17 +82,6 @@ impl Query {
             }
             *lyrics = Some(new_lyrics);
             Ok(true)
-
-            // self.lines = lyrics
-            //     .get_timed_lines()
-            //     .as_ref()
-            //     .iter()
-            //     .map(|(time_tag, s)| {
-            //         let duration = Duration::from_millis(time_tag.get_timestamp() as u64);
-            //         let s = html_escape::decode_html_entities(&s).trim().to_string();
-            //         (duration, s)
-            //     })
-            //     .collect::<Vec<(Duration, String)>>();
         } else {
             Ok(false)
         }

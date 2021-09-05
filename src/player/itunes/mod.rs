@@ -6,6 +6,8 @@ use std::ptr::NonNull;
 use std::time::Duration;
 use std::time::SystemTime;
 
+use anyhow::Context;
+use anyhow::Result;
 use bindings::Windows::Win32::Foundation::*;
 use bindings::Windows::Win32::System::Com::*;
 use bindings::Windows::Win32::System::OleAutomation::*;
@@ -48,10 +50,11 @@ impl Player for ITunes {
 }
 
 impl ITunes {
-    pub fn new() -> windows::Result<Self> {
+    pub fn new() -> Result<Self> {
         unsafe {
             CoInitialize(null_mut())?;
-            let instance: IiTunes = CoCreateInstance(&ITUNES_CLSID, None, CLSCTX_LOCAL_SERVER)?;
+            let instance: IiTunes = CoCreateInstance(&ITUNES_CLSID, None, CLSCTX_LOCAL_SERVER)
+                .context("Failed to create IiTunes instance")?;
             let connection_point_container = instance.cast::<IConnectionPointContainer>()?;
             let connection_point =
                 connection_point_container.FindConnectionPoint(&I_ITUNES_EVENTS_IID)?;
@@ -81,7 +84,7 @@ impl ITunes {
                 .GetCurrentTrack()
                 .unwrap_or(None)
                 .and_then(|track| {
-                    (|| -> windows::Result<TrackInfo> {
+                    (|| -> Result<TrackInfo> {
                         let name = track.GetName()?.to_string();
                         let artist = track.GetArtist()?.to_string();
                         Ok(TrackInfo { name, artist })
@@ -321,12 +324,16 @@ unsafe impl Interface for IITTrack {
 impl IITTrack {
     pub unsafe fn GetName(&self) -> Result<BSTR> {
         let mut abi: <BSTR as Abi>::Abi = mem::zeroed();
-        (Interface::vtable(self).8)(Abi::abi(self), &mut abi).from_abi(abi)
+        (Interface::vtable(self).8)(Abi::abi(self), &mut abi)
+            .from_abi(abi)
+            .context("Failed to GetName")
     }
 
     pub unsafe fn GetArtist(&self) -> Result<BSTR> {
         let mut abi: <BSTR as Abi>::Abi = mem::zeroed();
-        (Interface::vtable(self).22)(Abi::abi(self), &mut abi).from_abi(abi)
+        (Interface::vtable(self).22)(Abi::abi(self), &mut abi)
+            .from_abi(abi)
+            .context("Failed to GetArtist")
     }
 }
 

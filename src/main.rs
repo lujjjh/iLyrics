@@ -7,16 +7,26 @@ mod player;
 mod types;
 mod ui;
 
-use windows::*;
+use anyhow::Result;
+use log::error;
+use log::info;
 
 use initialize::initialize;
 use lyrics_window::LyricsWindow;
 use ui::run_message_loop;
 
 fn main() -> Result<()> {
-    initialize()?;
-    let lyrics_window = &mut LyricsWindow::new()?;
-    lyrics_window.show()?;
-    run_message_loop();
-    Ok(())
+    let run = || -> Result<()> {
+        initialize()?;
+        info!("Initialized");
+        let lyrics_window = &mut LyricsWindow::new()?;
+        lyrics_window.show()?;
+        run_message_loop();
+        Ok(())
+    };
+    let result = run();
+    if let Err(e) = result.as_ref() {
+        error!("Unexcepted error: {:?}", e);
+    }
+    result
 }

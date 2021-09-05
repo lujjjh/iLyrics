@@ -2,6 +2,7 @@ use std::ptr::null;
 use std::ptr::null_mut;
 use std::time::Duration;
 
+use anyhow::Result;
 use bindings::Windows;
 use bindings::Windows::Foundation::Numerics::*;
 use bindings::Windows::Win32::Foundation::*;
@@ -28,7 +29,7 @@ const PADDING_HORIZONTAL: f64 = 10.;
 const PADDING_VERTICAL: f64 = 5.;
 
 const DURATION_FADE_IN: Duration = Duration::from_millis(100);
-const DURATION_FADE_OUT: Duration = Duration::from_millis(1000);
+const DURATION_FADE_OUT: Duration = Duration::from_millis(800);
 const DURATION_SIZING: Duration = Duration::from_millis(200);
 const DURATION_SCROLLING: Duration = Duration::from_millis(350);
 
@@ -121,7 +122,8 @@ impl LyricsWindow {
         if unsafe { SetTimer(self.hwnd, 1, 100, None) } > 0 {
             Ok(())
         } else {
-            Err(HRESULT::from_thread().into())
+            let windows_error: windows::Error = HRESULT::from_thread().into();
+            Err(windows_error.into())
         }
     }
 
@@ -198,8 +200,10 @@ impl LyricsWindow {
                 return Ok(());
             }
         }
-        self.line_next = None;
-        self.schedule_transitions(None)?;
+        if self.line_next != None {
+            self.line_next = None;
+            self.schedule_transitions(None)?;
+        }
         Ok(())
     }
 
@@ -244,8 +248,9 @@ impl LyricsWindow {
                 if skip_if_hidden && opacity.GetValue()? == 0. {
                     transition.SetInitialValue(final_value)?;
                 }
-                animation_manager.ScheduleTransition(variable, &transition, time_now)
+                animation_manager.ScheduleTransition(variable, &transition, time_now)?;
             }
+            Ok(())
         };
         let do_transition_ease_out = |variable: &IUIAnimationVariable,
                                       duration: Duration,
@@ -263,11 +268,11 @@ impl LyricsWindow {
                 1.,
             )
         };
-        let do_transition_ease_in = |variable: &IUIAnimationVariable,
-                                     duration: Duration,
-                                     initial_value: Option<f64>,
-                                     final_value: f64,
-                                     skip_if_hidden: bool|
+        let do_transition_linear = |variable: &IUIAnimationVariable,
+                                    duration: Duration,
+                                    initial_value: Option<f64>,
+                                    final_value: f64,
+                                    skip_if_hidden: bool|
          -> Result<()> {
             _do_transition(
                 variable,
@@ -275,7 +280,7 @@ impl LyricsWindow {
                 initial_value,
                 final_value,
                 skip_if_hidden,
-                1.,
+                0.,
                 0.,
             )
         };
@@ -310,7 +315,7 @@ impl LyricsWindow {
                 do_transition_ease_out(line_next_opacity, DURATION_SCROLLING, Some(0.), 1., true)?;
             }
             _ => {
-                do_transition_ease_in(opacity, DURATION_FADE_OUT, None, 0., false)?;
+                do_transition_linear(opacity, DURATION_FADE_OUT, None, 0., false)?;
             }
         }
         Ok(())
@@ -577,13 +582,15 @@ impl LyricsWindow {
         } = self.get_or_init_resources()?;
         let string = HSTRING::from(text);
         unsafe {
-            dwrite_factory.CreateTextLayout(
-                PWSTR(string.as_wide().as_ptr() as *mut _),
-                string.len() as u32,
-                text_format,
-                max_width,
-                max_height,
-            )
+            dwrite_factory
+                .CreateTextLayout(
+                    PWSTR(string.as_wide().as_ptr() as *mut _),
+                    string.len() as u32,
+                    text_format,
+                    max_width,
+                    max_height,
+                )
+                .map_err(|e| e.into())
         }
     }
 
@@ -618,7 +625,7 @@ impl LyricsWindow {
         max_height: f32,
     ) -> Result<DWRITE_TEXT_METRICS> {
         let text_layout = self.create_text_layout(text, max_width, max_height)?;
-        unsafe { text_layout.GetMetrics() }
+        unsafe { text_layout.GetMetrics() }.map_err(|e| e.into())
     }
 }
 
