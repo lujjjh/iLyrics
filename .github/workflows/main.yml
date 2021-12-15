@@ -1,0 +1,18 @@
+name: CI
+on: [pull_request, push]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: rustup update --no-self-update nightly && rustup default nightly
+      - run: rustup target add x86_64-pc-windows-msvc
+      - name: Release build
+        run: .\build.ps1
+      - name: Upload
+        uses: actions/upload-artifact@v2
+        with:
+          name: ilyrics.exe
+          path: target/x86_64-pc-windows-msvc/release/ilyrics.exe
+          retention-days: 5
