@@ -141,7 +141,7 @@ impl LyricsWindow {
                     let changed = self
                         .query
                         .get_lyrics(song_name, song_artist, &mut lyrics)
-                        .unwrap_or(false);
+                        .unwrap_or(true);
                     if changed {
                         self.set_lyrics(lyrics).unwrap();
                     }
