@@ -1,0 +1,3 @@
+[submodule "sciter-js-sdk"]
+	path = sciter-js-sdk
+	url = git@github.com:c-smile/sciter-js-sdk.git

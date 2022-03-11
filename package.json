@@ -1,0 +1,9 @@
+{
+  "private": true,
+  "scripts": {
+    "start": "npm run build:deps && npm run build:html && go run ./cmd/ilyrics",
+    "build": "npm run build:deps && npm run build:html && go build ./cmd/ilyrics",
+    "build:deps": "cd sciter-js-sdk/bin && cp macosx/libsciter.dylib ../../ && cp windows/x64/sciter.dll ../../",
+    "build:html": "cd html && npm run build"
+  }
+}
