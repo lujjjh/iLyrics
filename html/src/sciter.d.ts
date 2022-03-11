@@ -117,7 +117,7 @@ declare namespace Graphics {
   }
 
   class Text {
-    constructor(s: string);
+    constructor(s: string, className?: string);
 
     readonly lines: number;
     chars: string;

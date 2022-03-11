@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	timedLineRegexp    = regexp.MustCompile(`^((?:\[\d{2,}:\d{2,}\.\d{2,}\])+)(.+)`)
+	timedLineRegexp    = regexp.MustCompile(`^((?:\[\d{2,}:\d{2,}\.\d{2,}\])+)(.*)`)
 	timeSegmentsRegexp = regexp.MustCompile(`\[(\d{2,}):(\d{2,})\.(\d{2,})\]`)
 )
 

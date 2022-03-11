@@ -67,8 +67,7 @@ class Line {
   private visible = false;
 
   constructor(private element: Element, text: string) {
-    this.text = new Graphics.Text(text);
-    this.text.class = 'lyrics-line';
+    this.text = new Graphics.Text(text, 'lyrics-line');
     this.opacity = new Variable(0, element);
     this.translateY = new Variable(0.5 * this.height, element);
   }
@@ -168,6 +167,17 @@ export const initWindow = () => {
   Window.this.addEventListener('spacechange', () => void updateWindow());
 
   updateWindow();
+
+  const trayIcon = Window.this.trayIcon({
+    text: 'iLyrics',
+  });
+
+  Window.this.on('trayiconclick', (evt) => {
+    var [sx, sy] = Window.this.box('position', 'client', 'screen', true);
+    var menu = document.$('menu#tray');
+    var { screenX, screenY } = evt.data;
+    menu.popupAt(screenX - sx, screenY - sy, 2);
+  });
 
   globalThis.setLyrics = (text: string) => {
     document.querySelector('lyrics').setLyricsLine(text);
