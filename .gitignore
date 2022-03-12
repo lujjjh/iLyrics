@@ -3,3 +3,4 @@
 *.so
 
 /ilyrics
+/node_modules

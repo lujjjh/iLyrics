@@ -2,6 +2,7 @@
 #define NOW_PLAYING_H_
 
 #include <stdlib.h>
+#include <stdint.h>
 
 typedef enum PlaybackState { Paused, Playing } PlaybackState;
 

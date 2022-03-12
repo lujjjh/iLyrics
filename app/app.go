@@ -77,7 +77,7 @@ func (a *App) updateLyricsWorker() {
 		var lyricsLine lrc.LyricsLine
 		if a.nowPlayingInfo != nil && a.nowPlayingInfo.PlaybackState == media.PlaybackStatePlaying && a.currentLyrics != nil {
 			// HACK: +500ms for animation.
-			lyricsLine = a.currentLyrics.Line(a.nowPlayingInfo.PlaybackPosition() + 350*time.Millisecond)
+			lyricsLine = a.currentLyrics.Line(a.nowPlayingInfo.PlaybackPosition() + 500*time.Millisecond)
 		}
 		if lyricsLine == a.currentLyricsLine {
 			continue

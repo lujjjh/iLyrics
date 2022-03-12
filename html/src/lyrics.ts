@@ -42,7 +42,7 @@ class Frame {
     path.arcTo(right, bottom, left, bottom, radius);
     const opacity = this.opacity.value;
     // HACK: opacity(1) does not work
-    ctx.pushLayer('content-box', opacity < 1 ? `opacity(${opacity})` : '');
+    if (opacity < 1) ctx.pushLayer('content-box', `opacity(${opacity})`);
     ctx.pushLayer(path);
     ctx.save();
     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
@@ -50,7 +50,7 @@ class Frame {
     ctx.restore();
     renderContent(ctx);
     ctx.popLayer();
-    ctx.popLayer();
+    if (opacity < 1) ctx.popLayer();
   }
 }
 
@@ -84,9 +84,9 @@ class Line {
     const { width, height } = this.element.getBoundingClientRect();
     const opacity = this.opacity.value;
     const translateY = this.translateY.value;
-    ctx.pushLayer('content-box', opacity < 1 ? `opacity(${opacity})` : '');
+    if (opacity < 1) ctx.pushLayer('content-box', `opacity(${opacity})`)
     ctx.draw(this.text, { x: width / 2, y: height / 2 + translateY, alignment: 5 });
-    ctx.popLayer();
+    if (opacity < 1) ctx.popLayer();
   }
 
   async show() {
@@ -159,9 +159,9 @@ export const initWindow = () => {
   const window = Window.this;
   const updateWindow = () => {
     window.isTopmost = true;
-    const height = 100;
-    const [left, _top, right, bottom] = window.screenBox('workarea', 'rect', false);
-    window.move(left, bottom - height, right - left, height);
+    const heightPpx = 100 * Window.screenBox(window.screen, 'devicePixelRatio');
+    const [leftPpx, _topPpx, rightPpx, bottomPpx] = window.screenBox('workarea', 'rect', true);
+    window.move(leftPpx, bottomPpx - heightPpx, rightPpx - leftPpx, heightPpx);
   };
   window.addEventListener('spacechange', () => void updateWindow());
   updateWindow();
