@@ -1,0 +1,10 @@
+{
+  "name": "@ilyrics/html",
+  "private": true,
+  "scripts": {
+    "build": "esbuild src/lyrics.ts --bundle --format=esm --outfile=build/lyrics.js && cpy --flat src/lyrics.html build/"
+  },
+  "devDependencies": {
+    "esbuild": "^0.14.25"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "private": true,
+  "scripts": {
+    "postinstall": "npm run copy:lib && npm run install:html",
+    "copy:lib": "cpy --cwd=sciter-js-sdk/bin --flat macosx/libsciter.dylib windows/x64/sciter.dll ../../",
+    "install:html": "cd html && npm install",
+    "start": "npm run build:html && go run ./cmd/ilyrics",
+    "build": "npm run build:html && go build ./cmd/ilyrics",
+    "build:html": "cd html && npm run build"
+  },
+  "devDependencies": {
+    "cpy-cli": "^4.1.0"
+  }
+}

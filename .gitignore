@@ -1,1 +1,6 @@
-/target
+*.dll
+*.dylib
+*.so
+
+/ilyrics
+/node_modules
