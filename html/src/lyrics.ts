@@ -156,30 +156,19 @@ export class Lyrics extends Element {
 }
 
 export const initWindow = () => {
+  const window = Window.this;
   const updateWindow = () => {
-    const window = Window.this;
     window.isTopmost = true;
     const height = 100;
     const [left, _top, right, bottom] = window.screenBox('workarea', 'rect', false);
     window.move(left, bottom - height, right - left, height);
   };
-
-  Window.this.addEventListener('spacechange', () => void updateWindow());
-
+  window.addEventListener('spacechange', () => void updateWindow());
   updateWindow();
 
-  const trayIcon = Window.this.trayIcon({
-    text: 'iLyrics',
+  Object.defineProperty(globalThis, 'setLyrics', {
+    value: (text: string) => {
+      document.querySelector('lyrics')!.setLyricsLine(text);
+    },
   });
-
-  Window.this.on('trayiconclick', (evt) => {
-    var [sx, sy] = Window.this.box('position', 'client', 'screen', true);
-    var menu = document.$('menu#tray');
-    var { screenX, screenY } = evt.data;
-    menu.popupAt(screenX - sx, screenY - sy, 2);
-  });
-
-  globalThis.setLyrics = (text: string) => {
-    document.querySelector('lyrics').setLyricsLine(text);
-  };
 };

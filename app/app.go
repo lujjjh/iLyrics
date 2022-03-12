@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"log"
 	"sync"
 	"time"
 
@@ -59,7 +58,6 @@ func (a *App) updateNowPlayingInfo(nowPlayingInfo *media.NowPlayingInfo) {
 	defer cancel()
 	lyrics, err := a.lyricsStore.QueryByNowPlayingInfo(ctx, nowPlayingInfo)
 	if err != nil {
-		log.Println(err)
 		a.updateCurrentLyrics(nil)
 		return
 	}
