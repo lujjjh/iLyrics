@@ -407,6 +407,7 @@ dependencies = [
  "log",
  "lrc",
  "once_cell",
+ "regex",
  "reqwest",
  "tokio",
  "utf16_lit",
