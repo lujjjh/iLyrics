@@ -4,11 +4,19 @@ use log::error;
 use log::info;
 use log::warn;
 use lrc::Lyrics;
+use regex::Regex;
 use reqwest::blocking::Client;
+use std::error::Error;
 
 pub struct Query {
     client: Client,
     last_query: String,
+}
+
+fn convert_lyrics(lyrics: String) -> Result<String, Box<dyn Error>> {
+    let re = Regex::new(r"\[(\d{2}:\d{2}\.\d{2})\d\]")?;
+    let result = re.replace_all(&lyrics, "[$1]");
+    Ok(result.to_string())
 }
 
 impl Query {
@@ -54,10 +62,13 @@ impl Query {
                     warn!("Bad status: {:?}", e);
                     e
                 })?;
-            let body = response.text().map_err(|e| {
+            let mut body = response.text().map_err(|e| {
                 error!("Failed to read response body: {:?}", e);
                 e
             })?;
+
+            body = convert_lyrics(body)?;
+
             let downloaded_lyrics = Lyrics::from_str(body).map_err(|e| {
                 error!("Failed to parse lyrics: {:?}", e);
                 e
